@@ -112,6 +112,17 @@ jobs:
           V8_LIB_PATH=(${{ inputs.lp_cache }}/v8-${{ env.V8_REVISION }}/out/${{ env.OS }}/${{ inputs.build_type }}_*/obj/zig/$LIB_GLOB)
           mv "${V8_LIB_PATH[0]}" "libc_v8_${{ env.V8_REVISION }}_${{ env.OS }}_$DST.a"
 
+      # Tagged builds publish a release asset; branch builds keep the archive
+      # as a workflow artifact so a target can be validated end to end before
+      # anything is tagged.
+      - name: Share the build
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: libc_v8_${{ env.OS }}_${{ env.ARCH }}
+          path: libc_v8_*.a
+          retention-days: 7
+
       - name: Upload the build
         if: startsWith(github.ref, 'refs/tags/')
         uses: ncipollo/release-action@v1
