@@ -60,6 +60,11 @@ jobs:
         run: |
           echo "C:\Program Files\Git\usr\bin" >> "$GITHUB_PATH"
           echo "DEPOT_TOOLS_WIN_TOOLCHAIN=0" >> "$GITHUB_ENV"
+          # depot_tools self-updates by running git on its own checkout. Here
+          # it is a plain copy out of the Zig package cache with no .git, so
+          # the update fails and gclient refuses to run. Skipping it still
+          # leaves the cipd bootstrap that fetches the vendored Python.
+          echo "DEPOT_TOOLS_UPDATE=0" >> "$GITHUB_ENV"
 
       - name: Install dependencies (Linux x86_64)
         if: contains(inputs.target, 'linux')
