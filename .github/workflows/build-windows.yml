@@ -1,0 +1,25 @@
+name: build-windows
+
+# On-demand Windows build, kept separate from build-release so the Windows
+# target can be iterated on without spending a full six-platform matrix.
+# Once it is reliably green this file can go away -- build-release.yml already
+# carries the same job.
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - "claude/windows-**"
+      - "windows-**"
+
+permissions:
+  contents: write
+
+jobs:
+  build-x86_64-windows:
+    uses: ./.github/workflows/_prebuild-v8.yml
+    with:
+      runner: windows-2022
+      target: x86_64-windows
+      build_type: release

@@ -52,3 +52,10 @@ jobs:
       runner: macos-26
       target: aarch64-ios-simulator
       build_type: release
+
+  build-x86_64-windows:
+    uses: ./.github/workflows/_prebuild-v8.yml
+    with:
+      runner: windows-2022
+      target: x86_64-windows
+      build_type: release

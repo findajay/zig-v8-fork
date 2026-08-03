@@ -49,6 +49,18 @@ jobs:
         with:
           python-version: '3.13'
 
+      # build.zig stages files with cp/mkdir/touch. Git for Windows ships them
+      # under usr\bin, which is not on PATH by default -- only Git\bin is.
+      # DEPOT_TOOLS_WIN_TOOLCHAIN=0 tells Chromium's toolchain setup to use the
+      # Visual Studio install on the runner rather than Google's internal
+      # pinned SDK package, which external builders cannot fetch.
+      - name: Configure Windows build environment
+        if: contains(inputs.target, 'windows')
+        shell: bash
+        run: |
+          echo "C:\Program Files\Git\usr\bin" >> "$GITHUB_PATH"
+          echo "DEPOT_TOOLS_WIN_TOOLCHAIN=0" >> "$GITHUB_ENV"
+
       - name: Install dependencies (Linux x86_64)
         if: contains(inputs.target, 'linux')
         shell: bash
@@ -88,7 +100,16 @@ jobs:
           if [ "${{ env.OS }}" = "ios" ]; then
             DST="simulator_${DST}"
           fi
-          V8_LIB_PATH=(${{ inputs.lp_cache }}/v8-${{ env.V8_REVISION }}/out/${{ env.OS }}/${{ inputs.build_type }}_*/obj/zig/libc_v8.a)
+          # GN emits c_v8.lib on Windows and libc_v8.a everywhere else. The
+          # published asset keeps the .a name on every platform so consumers
+          # have one filename pattern; the contents are a COFF archive on
+          # Windows, which lld links happily either way.
+          if [ "${{ env.OS }}" = "windows" ]; then
+            LIB_GLOB=c_v8.lib
+          else
+            LIB_GLOB=libc_v8.a
+          fi
+          V8_LIB_PATH=(${{ inputs.lp_cache }}/v8-${{ env.V8_REVISION }}/out/${{ env.OS }}/${{ inputs.build_type }}_*/obj/zig/$LIB_GLOB)
           mv "${V8_LIB_PATH[0]}" "libc_v8_${{ env.V8_REVISION }}_${{ env.OS }}_$DST.a"
 
       - name: Upload the build

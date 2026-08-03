@@ -1,6 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const V8_VERSION: []const u8 = "14.9.207.35";
+
+// V8 is always built natively -- gclient/gn/ninja drive the host toolchain --
+// so the host OS is what decides how depot_tools is invoked. The *target* is
+// still what names the output directory and library.
+const host_is_windows = builtin.os.tag == .windows;
 
 const LazyPath = std.Build.LazyPath;
 
@@ -16,8 +22,15 @@ const staged_files = [_]StagedFile{
 };
 
 fn getDepotToolExePath(b: *std.Build, depot_tools_dir: []const u8, executable: []const u8) []const u8 {
-    return b.fmt("{s}/{s}", .{ depot_tools_dir, executable });
+    // On Windows depot_tools ships .bat shims next to the extensionless shell
+    // scripts; only the shims are executable by the Windows process loader.
+    const ext = if (host_is_windows) ".bat" else "";
+    return b.fmt("{s}/{s}{s}", .{ depot_tools_dir, executable, ext });
 }
+
+// depot_tools vendors its interpreter under python-bin/ on POSIX but exposes
+// it as a top-level shim on Windows.
+const depot_tools_python = if (host_is_windows) "python3" else "python-bin/python3";
 
 fn addDepotToolsToPath(step: *std.Build.Step.Run, depot_tools_dir: []const u8) void {
     step.addPathDir(depot_tools_dir);
@@ -69,6 +82,15 @@ const GnArgs = struct {
                     try args.appendSlice(gpa, "clang_use_chrome_plugins=false\n");
                     try args.appendSlice(gpa, "treat_warnings_as_errors=false\n");
                 }
+            },
+            .windows => {
+                // Chromium normally pulls a pinned Windows SDK from an
+                // internal package. External builds set
+                // DEPOT_TOOLS_WIN_TOOLCHAIN=0 (see the workflow) and use the
+                // locally installed Visual Studio instead, whose SDK version
+                // will not be the pinned one -- so new warnings are expected
+                // and must not fail the build.
+                try args.appendSlice(gpa, "treat_warnings_as_errors=false\n");
             },
             else => {},
         }
@@ -392,7 +414,7 @@ fn bootstrapV8(
 
     // Run clang update
     const clang_update = b.addSystemCommand(&.{
-        getDepotToolExePath(b, depot_tools_dir, "python-bin/python3"),
+        getDepotToolExePath(b, depot_tools_dir, depot_tools_python),
         "tools/clang/scripts/update.py",
     });
     clang_update.setCwd(.{ .cwd_relative = v8_dir });
@@ -430,7 +452,10 @@ fn buildV8(
         args_hash = args_hash *% 33 +% c;
     }
     const out_dir = b.fmt("out/{s}/{s}_{x}", .{ @tagName(target.result.os.tag), if (gn_args.is_debug) "debug" else "release", args_hash });
-    const libc_v8_path = b.fmt("{s}/obj/zig/libc_v8.a", .{out_dir});
+    // GN names a static_library after the platform convention: libc_v8.a
+    // everywhere, c_v8.lib on Windows.
+    const lib_name = if (target.result.os.tag == .windows) "c_v8.lib" else "libc_v8.a";
+    const libc_v8_path = b.fmt("{s}/obj/zig/{s}", .{ out_dir, lib_name });
     const full_libc_v8_lazy_path = v8_dir_lazy_path.path(b, libc_v8_path);
 
     // Bootstrap marker is shared across profiles, so compare staged sources
