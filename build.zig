@@ -240,21 +240,17 @@ fn bootstrapDepotTools(b: *std.Build, depot_tools_dir: []const u8) !*std.Build.S
 
     std.debug.print("Bootstrapping depot_tools {s} in {s} (this will take a while)...\n", .{ V8_VERSION, depot_tools_dir });
 
-    // depot_tools carries a few symlinks (cbuildbot, luci-auth-fido2-plugin)
-    // that are dangling in the packaged tree. Creating a symlink on Windows
-    // needs Developer Mode or elevation, and `cp` fails outright rather than
-    // skipping them -- so there, copy through tar with symlinks filtered out.
-    // They are ChromeOS and auth-plugin entry points that a V8 build never
-    // touches.
+    // depot_tools packages a couple of dangling symlinks (cbuildbot,
+    // luci-auth-fido2-plugin). Creating a symlink on Windows needs Developer
+    // Mode or elevation, so cp reports those two and exits non-zero -- while
+    // still copying everything else. Both are ChromeOS/auth entry points a V8
+    // build never invokes, so check for the tools that are actually needed
+    // rather than trusting cp's exit status.
     const copy_depot_tools = blk: {
         const run = if (host_is_windows)
             b.addSystemCommand(&.{
                 "sh", "-c",
-                \\set -e
-                \\mkdir -p "$1"
-                \\cd "$0"
-                \\find . ! -type l -print0 | tar --null -cf - -T - | (cd "$1" && tar xf -)
-                ,
+                "cp -r \"$0\" \"$1\" || true; test -f \"$1/gn.bat\" && test -f \"$1/gclient.bat\" && test -f \"$1/ensure_bootstrap.bat\"",
             })
         else
             b.addSystemCommand(&.{ "cp", "-r" });
