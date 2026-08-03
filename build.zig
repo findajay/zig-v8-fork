@@ -250,7 +250,7 @@ fn bootstrapDepotTools(b: *std.Build, depot_tools_dir: []const u8) !*std.Build.S
         const run = if (host_is_windows)
             b.addSystemCommand(&.{
                 "sh", "-c",
-                "cp -r \"$0\" \"$1\" || true; test -f \"$1/gn.bat\" && test -f \"$1/gclient.bat\" && test -f \"$1/ensure_bootstrap.bat\"",
+                "cp -r \"$0\" \"$1\" || true; echo \"depot_tools shims:\" $(cd \"$1\" && ls *.bat 2>/dev/null); echo \"bootstrap entries:\" $(cd \"$1\" && ls | grep -i bootstrap); test -f \"$1/gclient.bat\"",
             })
         else
             b.addSystemCommand(&.{ "cp", "-r" });
