@@ -275,15 +275,24 @@ fn bootstrapDepotTools(b: *std.Build, depot_tools_dir: []const u8) !*std.Build.S
     }));
     write_telemetry_config.step.dependOn(&copy_depot_tools.step);
 
-    const ensure_bootstrap = b.addSystemCommand(&.{
-        getDepotToolExePath(b, depot_tools_dir, "ensure_bootstrap"),
-    });
-    ensure_bootstrap.setCwd(.{ .cwd_relative = depot_tools_dir });
-    addDepotToolsToPath(ensure_bootstrap, depot_tools_dir);
-    ensure_bootstrap.step.dependOn(&write_telemetry_config.step);
+    // ensure_bootstrap is a POSIX shell script with no .bat counterpart --
+    // on Windows the shims run bootstrap\\win_tools.bat themselves the first
+    // time one of them is invoked, so the vendored Python and Git arrive as a
+    // side effect of the first gclient call instead.
+    const bootstrapped: *std.Build.Step = if (host_is_windows)
+        &write_telemetry_config.step
+    else blk: {
+        const ensure_bootstrap = b.addSystemCommand(&.{
+            getDepotToolExePath(b, depot_tools_dir, "ensure_bootstrap"),
+        });
+        ensure_bootstrap.setCwd(.{ .cwd_relative = depot_tools_dir });
+        addDepotToolsToPath(ensure_bootstrap, depot_tools_dir);
+        ensure_bootstrap.step.dependOn(&write_telemetry_config.step);
+        break :blk &ensure_bootstrap.step;
+    };
 
     const create_marker = b.addSystemCommand(&.{ "touch", marker_file });
-    create_marker.step.dependOn(&ensure_bootstrap.step);
+    create_marker.step.dependOn(bootstrapped);
 
     return &create_marker.step;
 }
