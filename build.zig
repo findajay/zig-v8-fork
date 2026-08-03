@@ -240,9 +240,28 @@ fn bootstrapDepotTools(b: *std.Build, depot_tools_dir: []const u8) !*std.Build.S
 
     std.debug.print("Bootstrapping depot_tools {s} in {s} (this will take a while)...\n", .{ V8_VERSION, depot_tools_dir });
 
-    const copy_depot_tools = b.addSystemCommand(&.{ "cp", "-r" });
-    copy_depot_tools.addDirectoryArg(depot_tools.path(""));
-    copy_depot_tools.addArg(depot_tools_dir);
+    // depot_tools carries a few symlinks (cbuildbot, luci-auth-fido2-plugin)
+    // that are dangling in the packaged tree. Creating a symlink on Windows
+    // needs Developer Mode or elevation, and `cp` fails outright rather than
+    // skipping them -- so there, copy through tar with symlinks filtered out.
+    // They are ChromeOS and auth-plugin entry points that a V8 build never
+    // touches.
+    const copy_depot_tools = blk: {
+        const run = if (host_is_windows)
+            b.addSystemCommand(&.{
+                "sh", "-c",
+                \\set -e
+                \\mkdir -p "$1"
+                \\cd "$0"
+                \\find . ! -type l -print0 | tar --null -cf - -T - | (cd "$1" && tar xf -)
+                ,
+            })
+        else
+            b.addSystemCommand(&.{ "cp", "-r" });
+        run.addDirectoryArg(depot_tools.path(""));
+        run.addArg(depot_tools_dir);
+        break :blk run;
+    };
 
     const build_telemetry_config_content =
         \\ {
