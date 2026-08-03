@@ -251,13 +251,16 @@ fn bootstrapDepotTools(b: *std.Build, depot_tools_dir: []const u8) !*std.Build.S
             b.addSystemCommand(&.{
                 "sh", "-c",
                 "cp -r \"$0\" \"$1\" || true; test -f \"$1/gclient.bat\"; " ++
-                    // git_cache.py shells out to 'git.bat', a wrapper the
-                    // bootstrap generates -- which DEPOT_TOOLS_UPDATE=0 skips,
-                    // because that same bootstrap tries to git-update a tree
-                    // that is a plain copy with no .git. Point the wrapper at
-                    // the system git instead; naming git.exe keeps it from
+                    // depot_tools generates git.bat and python3.bat during
+                    // bootstrap -- which DEPOT_TOOLS_UPDATE=0 skips, because
+                    // that same bootstrap tries to git-update a tree that is a
+                    // plain copy with no .git. Point them at the system git and
+                    // python instead; naming the .exe keeps each wrapper from
                     // re-entering itself through PATH.
-                    "[ -f \"$1/git.bat\" ] || printf '@echo off\\ngit.exe %%*\\n' > \"$1/git.bat\"",
+                    "[ -f \"$1/git.bat\" ] || printf '@echo off\\ngit.exe %%*\\n' > \"$1/git.bat\"; " ++
+                    // Same story for python3.bat, which the build invokes
+                    // directly for the clang update.
+                    "[ -f \"$1/python3.bat\" ] || printf '@echo off\\npython.exe %%*\\n' > \"$1/python3.bat\"",
             })
         else
             b.addSystemCommand(&.{ "cp", "-r" });
